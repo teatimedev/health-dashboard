@@ -1,0 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0a0c08;
+  --bg-secondary: #0e100b;
+  --bg-card: #121410;
+  --bg-card-hover: #181c14;
+  --border: #2a3020;
+  --border-bright: #3a4830;
+  --text-primary: #d4dcc4;
+  --text-secondary: #8a9478;
+  --text-dim: #4a5440;
+  --amber: #ffb627;
+  --amber-dim: #ffb62735;
+  --green: #4ade80;
+  --green-dim: #4ade8030;
+  --lime: #a3e635;
+  --lime-dim: #a3e63530;
+  --red: #ef4444;
+  --red-dim: #ef444430;
+  --blue: #38bdf8;
+  --blue-dim: #38bdf830;
+  --white: #e8eee0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Source Code Pro', monospace;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+/* Noise texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-bright);
+}
+
+/* Animation keyframes */
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-card-in {
+  animation: cardIn 0.3s ease forwards;
+  opacity: 0;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease forwards;
+  opacity: 0;
+}
+
+/* Recharts customization */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: #181c14;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+/* Corner bracket decoration */
+.bracket-card {
+  position: relative;
+}
+.bracket-card::before,
+.bracket-card::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: var(--amber);
+  opacity: 0.4;
+}
+.bracket-card::before {
+  top: 4px;
+  left: 4px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+.bracket-card::after {
+  bottom: 4px;
+  right: 4px;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+}
