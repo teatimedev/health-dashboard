@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { DailyMetrics, Goals, TimeRange, ViewTab } from '@/lib/types';
-import { loadMetrics, saveMetrics, addMetrics, loadGoals, getTodayMetrics, getWeightTrend, getWeightRate, getProjectedGoalDate, getPersonalRecords, filterByTimeRange, getStreak, getComparisonDelta } from '@/lib/store';
+import { loadMetrics, loadMetricsAsync, saveMetrics, addMetrics, loadGoals, getTodayMetrics, getWeightTrend, getWeightRate, getProjectedGoalDate, getPersonalRecords, filterByTimeRange, getStreak, getComparisonDelta } from '@/lib/store';
 import { generateMockData } from '@/lib/mock-data';
 import { parseHealthData } from '@/lib/parser';
 import Header from '@/components/Header';
@@ -23,17 +23,26 @@ export default function Home() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const stored = loadMetrics();
-    if (stored.length > 0) {
-      setData(stored);
-    } else {
-      // Load mock data for demo
-      const mock = generateMockData();
-      saveMetrics(mock);
-      setData(mock);
+    async function init() {
+      // Try Supabase first, then localStorage, then mock data
+      const stored = await loadMetricsAsync();
+      if (stored.length > 0) {
+        setData(stored);
+      } else {
+        const local = loadMetrics();
+        if (local.length > 0) {
+          setData(local);
+        } else {
+          // Load mock data for demo
+          const mock = generateMockData();
+          saveMetrics(mock);
+          setData(mock);
+        }
+      }
+      setGoals(loadGoals());
+      setIsLoaded(true);
     }
-    setGoals(loadGoals());
-    setIsLoaded(true);
+    init();
   }, []);
 
   const handleFileUpload = useCallback((files: File[]) => {

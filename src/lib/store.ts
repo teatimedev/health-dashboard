@@ -1,11 +1,54 @@
 import { DailyMetrics, Goals, PersonalRecord, WeightTrend, TimeRange } from './types';
 import { mergeMetrics } from './parser';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 const STORAGE_KEY = 'recon_health_data';
 const GOALS_KEY = 'recon_goals';
 
-// Client-side storage (localStorage)
-// Can be swapped for Supabase later
+// Convert snake_case DB row to camelCase DailyMetrics
+function fromDbRow(row: Record<string, unknown>): DailyMetrics {
+  return {
+    date: String(row.date),
+    weight: row.weight != null ? Number(row.weight) : undefined,
+    bodyFat: row.body_fat != null ? Number(row.body_fat) : undefined,
+    steps: row.steps != null ? Number(row.steps) : undefined,
+    activeCalories: row.active_calories != null ? Number(row.active_calories) : undefined,
+    basalCalories: row.basal_calories != null ? Number(row.basal_calories) : undefined,
+    distance: row.distance != null ? Number(row.distance) : undefined,
+    flightsClimbed: row.flights_climbed != null ? Number(row.flights_climbed) : undefined,
+    restingHeartRate: row.resting_heart_rate != null ? Number(row.resting_heart_rate) : undefined,
+    heartRateMin: row.heart_rate_min != null ? Number(row.heart_rate_min) : undefined,
+    heartRateMax: row.heart_rate_max != null ? Number(row.heart_rate_max) : undefined,
+    heartRateAvg: row.heart_rate_avg != null ? Number(row.heart_rate_avg) : undefined,
+    sleepDuration: row.sleep_duration != null ? Number(row.sleep_duration) : undefined,
+    sleepInBed: row.sleep_in_bed != null ? Number(row.sleep_in_bed) : undefined,
+    sleepDeep: row.sleep_deep != null ? Number(row.sleep_deep) : undefined,
+    sleepLight: row.sleep_light != null ? Number(row.sleep_light) : undefined,
+    sleepREM: row.sleep_rem != null ? Number(row.sleep_rem) : undefined,
+    sleepAwake: row.sleep_awake != null ? Number(row.sleep_awake) : undefined,
+    bloodOxygen: row.blood_oxygen != null ? Number(row.blood_oxygen) : undefined,
+  };
+}
+
+// Load from Supabase if configured, otherwise localStorage
+export async function loadMetricsAsync(): Promise<DailyMetrics[]> {
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('daily_metrics')
+        .select('*')
+        .order('date', { ascending: true });
+      if (!error && data && data.length > 0) {
+        return data.map(row => fromDbRow(row as Record<string, unknown>));
+      }
+    } catch (e) {
+      console.warn('Supabase fetch failed, falling back to localStorage:', e);
+    }
+  }
+  return loadMetrics();
+}
+
+// Client-side storage (localStorage) — fallback
 export function loadMetrics(): DailyMetrics[] {
   if (typeof window === 'undefined') return [];
   try {
