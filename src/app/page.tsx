@@ -13,6 +13,10 @@ import DailyDetail from '@/components/DailyDetail';
 import PersonalRecords from '@/components/PersonalRecords';
 import FileUpload from '@/components/FileUpload';
 import EmptyState from '@/components/EmptyState';
+import WeightView from '@/components/WeightView';
+import ActivityView from '@/components/ActivityView';
+import HeartView from '@/components/HeartView';
+import SleepView from '@/components/SleepView';
 
 export default function Home() {
   const [data, setData] = useState<DailyMetrics[]>([]);
@@ -93,6 +97,85 @@ export default function Home() {
     );
   }
 
+  const renderView = () => {
+    switch (activeTab) {
+      case 'weight':
+        return <WeightView data={data} goals={goals} />;
+      case 'activity':
+        return <ActivityView data={data} goals={goals} />;
+      case 'heart':
+        return <HeartView data={data} />;
+      case 'sleep':
+        return <SleepView data={data} goals={goals} />;
+      case 'sitrep':
+        return (
+          <main className="max-w-[1400px] mx-auto p-4">
+            <div className="flex items-center gap-2 mb-3 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-dim)]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
+              <span>SITREP — Personal Records</span>
+              <div className="flex-1 h-px bg-[var(--border)]" />
+            </div>
+            <PersonalRecords records={records} stepStreak={stepStreak} />
+          </main>
+        );
+      default:
+        return (
+          <main className="max-w-[1400px] mx-auto p-4">
+            {/* Section: Primary Metrics */}
+            <div className="flex items-center gap-2 mb-3 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-dim)]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
+              <span>Primary Metrics</span>
+              <div className="flex-1 h-px bg-[var(--border)]" />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
+              <MetricCard label="Weight" value={today?.weight?.toFixed(1) || '—'} unit="kg" color="amber"
+                delta={weightRate !== 0 ? { value: Math.abs(weightRate), direction: weightRate < 0 ? 'down' : 'up', good: weightRate < 0 } : undefined}
+                sparklineData={data.slice(-30).filter(d => d.weight).map(d => d.weight!)} delay={0} />
+              <MetricCard label="Steps" value={today?.steps?.toLocaleString() || '—'} color="green"
+                delta={stepsDelta ? { value: Math.abs(stepsDelta.percentage), direction: stepsDelta.percentage > 0 ? 'up' : 'down', good: stepsDelta.percentage > 0, suffix: '%' } : undefined}
+                progress={today?.steps && goals.dailySteps ? { current: today.steps, target: goals.dailySteps } : undefined} delay={1} />
+              <MetricCard label="Active Cal" value={today?.activeCalories?.toString() || '—'} unit="kcal" color="lime"
+                delta={calsDelta ? { value: Math.abs(calsDelta.percentage), direction: calsDelta.percentage > 0 ? 'up' : 'down', good: calsDelta.percentage > 0, suffix: '%' } : undefined}
+                progress={today?.activeCalories && goals.dailyCalories ? { current: today.activeCalories, target: goals.dailyCalories } : undefined} delay={2} />
+              <MetricCard label="Resting HR" value={today?.restingHeartRate?.toString() || '—'} unit="bpm" color="blue"
+                delta={hrDelta ? { value: Math.abs(hrDelta.value), direction: hrDelta.value < 0 ? 'down' : 'up', good: hrDelta.value < 0 } : undefined}
+                sparklineData={data.slice(-14).filter(d => d.restingHeartRate).map(d => d.restingHeartRate!)} delay={3} />
+              <MetricCard label="Sleep" value={today?.sleepDuration ? formatSleep(today.sleepDuration) : '—'} color="blue"
+                subtitle={sleepEff ? `${sleepEff}% eff` : undefined}
+                sparklineData={data.slice(-7).filter(d => d.sleepDuration).map(d => d.sleepDuration!)} delay={4} />
+              <MetricCard label="Distance" value={today?.distance?.toFixed(1) || '—'} unit="km" color="white" delay={5} />
+              <MetricCard label="Flights" value={today?.flightsClimbed?.toString() || '—'} color="white" delay={6} />
+              <MetricCard label="Body Fat" value={today?.bodyFat?.toFixed(1) || '—'} unit="%" color="white"
+                sparklineData={data.slice(-12).filter(d => d.bodyFat).map(d => d.bodyFat!)} delay={7} />
+            </div>
+
+            {/* Section: Weight Intelligence */}
+            <div className="flex items-center gap-2 mb-3 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-dim)]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
+              <span>Weight Intelligence</span>
+              <div className="flex-1 h-px bg-[var(--border)]" />
+            </div>
+
+            <WeightChart trend={weightTrend} rate={weightRate} totalLost={totalLost} goalWeight={goals.targetWeight || 85} goalDate={goalDate} timeRange={timeRange} onTimeRangeChange={setTimeRange} />
+
+            {/* Section: Daily Breakdown */}
+            <div className="flex items-center gap-2 mb-3 mt-4 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-dim)]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
+              <span>Daily Breakdown</span>
+              <div className="flex-1 h-px bg-[var(--border)]" />
+            </div>
+
+            <DailyDetail today={today} data={data} />
+
+            {/* Section: SITREP */}
+            <div className="flex items-center gap-2 mb-3 mt-4 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-dim)]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
+              <span>SITREP — Personal Records</span>
+              <div className="flex-1 h-px bg-[var(--border)]" />
+            </div>
+
+            <PersonalRecords records={records} stepStreak={stepStreak} />
+          </main>
+        );
+    }
+  };
+
   return (
     <div className="min-h-screen">
       <Header onUpload={() => setShowUpload(!showUpload)} />
@@ -100,112 +183,7 @@ export default function Home() {
 
       {showUpload && <FileUpload onUpload={handleFileUpload} onClose={() => setShowUpload(false)} />}
 
-      <main className="max-w-[1400px] mx-auto p-4">
-        {/* Section: Primary Metrics */}
-        <div className="flex items-center gap-2 mb-3 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-dim)]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-          <span>Primary Metrics</span>
-          <div className="flex-1 h-px bg-[var(--border)]" />
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
-          <MetricCard
-            label="Weight"
-            value={today?.weight?.toFixed(1) || '—'}
-            unit="kg"
-            color="amber"
-            delta={weightRate !== 0 ? { value: Math.abs(weightRate), direction: weightRate < 0 ? 'down' : 'up', good: weightRate < 0 } : undefined}
-            sparklineData={data.slice(-30).filter(d => d.weight).map(d => d.weight!)}
-            delay={0}
-          />
-          <MetricCard
-            label="Steps"
-            value={today?.steps?.toLocaleString() || '—'}
-            color="green"
-            delta={stepsDelta ? { value: Math.abs(stepsDelta.percentage), direction: stepsDelta.percentage > 0 ? 'up' : 'down', good: stepsDelta.percentage > 0, suffix: '%' } : undefined}
-            progress={today?.steps && goals.dailySteps ? { current: today.steps, target: goals.dailySteps } : undefined}
-            delay={1}
-          />
-          <MetricCard
-            label="Active Cal"
-            value={today?.activeCalories?.toString() || '—'}
-            unit="kcal"
-            color="lime"
-            delta={calsDelta ? { value: Math.abs(calsDelta.percentage), direction: calsDelta.percentage > 0 ? 'up' : 'down', good: calsDelta.percentage > 0, suffix: '%' } : undefined}
-            progress={today?.activeCalories && goals.dailyCalories ? { current: today.activeCalories, target: goals.dailyCalories } : undefined}
-            delay={2}
-          />
-          <MetricCard
-            label="Resting HR"
-            value={today?.restingHeartRate?.toString() || '—'}
-            unit="bpm"
-            color="blue"
-            delta={hrDelta ? { value: Math.abs(hrDelta.value), direction: hrDelta.value < 0 ? 'down' : 'up', good: hrDelta.value < 0 } : undefined}
-            sparklineData={data.slice(-14).filter(d => d.restingHeartRate).map(d => d.restingHeartRate!)}
-            delay={3}
-          />
-          <MetricCard
-            label="Sleep"
-            value={today?.sleepDuration ? formatSleep(today.sleepDuration) : '—'}
-            color="blue"
-            subtitle={sleepEff ? `${sleepEff}% eff` : undefined}
-            sparklineData={data.slice(-7).filter(d => d.sleepDuration).map(d => d.sleepDuration!)}
-            delay={4}
-          />
-          <MetricCard
-            label="Distance"
-            value={today?.distance?.toFixed(1) || '—'}
-            unit="km"
-            color="white"
-            delay={5}
-          />
-          <MetricCard
-            label="Flights"
-            value={today?.flightsClimbed?.toString() || '—'}
-            color="white"
-            delay={6}
-          />
-          <MetricCard
-            label="Body Fat"
-            value={today?.bodyFat?.toFixed(1) || '—'}
-            unit="%"
-            color="white"
-            sparklineData={data.slice(-12).filter(d => d.bodyFat).map(d => d.bodyFat!)}
-            delay={7}
-          />
-        </div>
-
-        {/* Section: Weight Intelligence */}
-        <div className="flex items-center gap-2 mb-3 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-dim)]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-          <span>Weight Intelligence</span>
-          <div className="flex-1 h-px bg-[var(--border)]" />
-        </div>
-
-        <WeightChart
-          trend={weightTrend}
-          rate={weightRate}
-          totalLost={totalLost}
-          goalWeight={goals.targetWeight || 85}
-          goalDate={goalDate}
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-        />
-
-        {/* Section: Daily Breakdown */}
-        <div className="flex items-center gap-2 mb-3 mt-4 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-dim)]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-          <span>Daily Breakdown</span>
-          <div className="flex-1 h-px bg-[var(--border)]" />
-        </div>
-
-        <DailyDetail today={today} data={data} />
-
-        {/* Section: SITREP */}
-        <div className="flex items-center gap-2 mb-3 mt-4 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-dim)]" style={{ fontFamily: "'Rajdhani', sans-serif" }}>
-          <span>SITREP — Personal Records</span>
-          <div className="flex-1 h-px bg-[var(--border)]" />
-        </div>
-
-        <PersonalRecords records={records} stepStreak={stepStreak} />
-      </main>
+      {renderView()}
     </div>
   );
 }

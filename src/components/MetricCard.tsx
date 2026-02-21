@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 
 interface MetricCardProps {
   label: string;
@@ -20,58 +20,50 @@ interface MetricCardProps {
 }
 
 const COLOR_MAP = {
-  amber: { text: 'var(--amber)', shadow: '0 0 12px var(--amber-dim)' },
-  green: { text: 'var(--green)', shadow: '0 0 12px var(--green-dim)' },
-  lime: { text: 'var(--lime)', shadow: '0 0 12px var(--lime-dim)' },
-  blue: { text: 'var(--blue)', shadow: '0 0 12px var(--blue-dim)' },
-  white: { text: 'var(--white)', shadow: 'none' },
+  amber: { text: 'var(--amber)', hex: '#ffb627', shadow: '0 0 12px var(--amber-dim)' },
+  green: { text: 'var(--green)', hex: '#4ade80', shadow: '0 0 12px var(--green-dim)' },
+  lime: { text: 'var(--lime)', hex: '#a3e635', shadow: '0 0 12px var(--lime-dim)' },
+  blue: { text: 'var(--blue)', hex: '#38bdf8', shadow: '0 0 12px var(--blue-dim)' },
+  white: { text: 'var(--white)', hex: '#e8eee0', shadow: 'none' },
 };
 
-function Sparkline({ data, color }: { data: number[]; color: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+function Sparkline({ data, color, hex }: { data: number[]; color: string; hex: string }) {
+  const { linePath, areaPath } = useMemo(() => {
+    if (data.length < 2) return { linePath: '', areaPath: '' };
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || data.length < 2) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.offsetWidth;
-    const h = canvas.offsetHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    ctx.scale(dpr, dpr);
-
+    const w = 200;
+    const h = 28;
+    const padding = 2;
     const min = Math.min(...data);
     const max = Math.max(...data);
     const range = max - min || 1;
-    const padding = 2;
 
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.lineJoin = 'round';
-
-    data.forEach((val, i) => {
+    const points = data.map((val, i) => {
       const x = (i / (data.length - 1)) * w;
       const y = h - padding - ((val - min) / range) * (h - padding * 2);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      return { x, y };
     });
 
-    ctx.stroke();
+    const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+    const area = `${line} L${w},${h} L0,${h} Z`;
 
-    // Fill
-    ctx.lineTo(w, h);
-    ctx.lineTo(0, h);
-    ctx.closePath();
-    ctx.fillStyle = color.replace(')', ', 0.08)').replace('rgb', 'rgba');
-    ctx.fill();
-  }, [data, color]);
+    return { linePath: line, areaPath: area };
+  }, [data]);
 
-  return <canvas ref={canvasRef} className="w-full h-7 mt-2" />;
+  if (data.length < 2) return null;
+
+  return (
+    <svg viewBox="0 0 200 28" className="w-full h-7 mt-2" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={`grad-${hex.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={hex} stopOpacity="0.15" />
+          <stop offset="100%" stopColor={hex} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#grad-${hex.replace('#', '')})`} />
+      <path d={linePath} fill="none" stroke={hex} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 export default function MetricCard({
@@ -111,7 +103,7 @@ export default function MetricCard({
       </div>
 
       {sparklineData && sparklineData.length > 1 && (
-        <Sparkline data={sparklineData} color={colors.text} />
+        <Sparkline data={sparklineData} color={colors.text} hex={colors.hex} />
       )}
 
       {progress && (
@@ -122,7 +114,7 @@ export default function MetricCard({
               style={{
                 width: `${progressPct}%`,
                 background: colors.text,
-                boxShadow: `0 0 6px ${colors.text}40`,
+                boxShadow: `0 0 6px ${colors.hex}40`,
               }}
             />
           </div>

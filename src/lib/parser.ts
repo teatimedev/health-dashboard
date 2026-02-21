@@ -1,7 +1,7 @@
 import Papa from 'papaparse';
-import { DailyMetrics, HourlyMetrics } from './types';
+import { DailyMetrics } from './types';
 
-// Health Auto Export field mappings
+// Health Auto Export field mappings (CSV column names → DailyMetrics keys)
 const FIELD_MAP: Record<string, keyof DailyMetrics> = {
   'date': 'date',
   'Date': 'date',
@@ -52,8 +52,59 @@ const FIELD_MAP: Record<string, keyof DailyMetrics> = {
   'oxygen_saturation': 'bloodOxygen',
 };
 
+// Health Auto Export metric name → how to map the data point
+// Format: { field: DailyMetrics key, valueKey: which field in the data point to use }
+const METRIC_NAME_MAP: Record<string, { field: keyof DailyMetrics; valueKey: string; convert?: (v: number) => number }[]> = {
+  // Body
+  'body_mass': [{ field: 'weight', valueKey: 'qty' }],
+  'weight': [{ field: 'weight', valueKey: 'qty' }],
+  'body_fat_percentage': [{ field: 'bodyFat', valueKey: 'qty' }],
+  'lean_body_mass': [],
+  'body_mass_index': [],
+
+  // Activity
+  'step_count': [{ field: 'steps', valueKey: 'qty' }],
+  'active_energy_burned': [{ field: 'activeCalories', valueKey: 'qty' }],
+  'active_energy': [{ field: 'activeCalories', valueKey: 'qty' }],
+  'basal_energy_burned': [{ field: 'basalCalories', valueKey: 'qty' }],
+  'distance_walking_running': [{ field: 'distance', valueKey: 'qty' }],
+  'walking_running_distance': [{ field: 'distance', valueKey: 'qty' }],
+  'flights_climbed': [{ field: 'flightsClimbed', valueKey: 'qty' }],
+
+  // Heart
+  'heart_rate': [
+    { field: 'heartRateMin', valueKey: 'min' },
+    { field: 'heartRateMax', valueKey: 'max' },
+    { field: 'heartRateAvg', valueKey: 'avg' },
+  ],
+  'resting_heart_rate': [{ field: 'restingHeartRate', valueKey: 'avg' }],
+  'heart_rate_variability_sdnn': [],
+
+  // Sleep — HAE can report in hours; we store in minutes
+  'sleep_analysis': [
+    { field: 'sleepDuration', valueKey: 'asleep', convert: hoursToMins },
+    { field: 'sleepInBed', valueKey: 'inBed', convert: hoursToMins },
+  ],
+  'sleep_analysis_asleep': [{ field: 'sleepDuration', valueKey: 'qty', convert: hoursToMins }],
+  'sleep_analysis_inbed': [{ field: 'sleepInBed', valueKey: 'qty', convert: hoursToMins }],
+  'sleep_deep': [{ field: 'sleepDeep', valueKey: 'qty', convert: hoursToMins }],
+  'sleep_core': [{ field: 'sleepLight', valueKey: 'qty', convert: hoursToMins }],
+  'sleep_rem': [{ field: 'sleepREM', valueKey: 'qty', convert: hoursToMins }],
+  'sleep_awake': [{ field: 'sleepAwake', valueKey: 'qty', convert: hoursToMins }],
+
+  // Blood Oxygen
+  'oxygen_saturation': [{ field: 'bloodOxygen', valueKey: 'avg' }],
+  'blood_oxygen': [{ field: 'bloodOxygen', valueKey: 'avg' }],
+};
+
+function hoursToMins(v: number): number {
+  // If the value is < 24, it's probably hours → convert to minutes
+  // If >= 24, it's probably already in minutes
+  return v < 24 ? Math.round(v * 60) : Math.round(v);
+}
+
 function normalizeDate(dateStr: string): string {
-  // Handle various date formats
+  // Handle ISO 8601 with timezone
   const d = new Date(dateStr);
   if (!isNaN(d.getTime())) {
     return d.toISOString().split('T')[0];
@@ -104,7 +155,6 @@ export function parseCSV(csvText: string): DailyMetrics[] {
 
     if (mapped.date) {
       const existing = metrics.get(mapped.date) || { date: mapped.date };
-      // Merge: keep existing values, overwrite with new non-undefined values
       for (const [key, value] of Object.entries(mapped)) {
         if (value !== undefined) {
           (existing as unknown as Record<string, unknown>)[key] = value;
@@ -117,54 +167,35 @@ export function parseCSV(csvText: string): DailyMetrics[] {
   return Array.from(metrics.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/**
+ * Parse Health Auto Export JSON format.
+ *
+ * Supported structures:
+ * 1. HAE standard:  { "data": { "metrics": [ { "name": "...", "units": "...", "data": [...] } ] } }
+ * 2. Flat metrics:  { "metrics": [ { "name": "...", "data": [...] } ] }
+ * 3. Array of daily records: [ { "date": "...", "steps": 1234, ... } ]
+ * 4. Summarized (aggregated by day): { "data": { "metrics": [ { "name": "step_count", "data": [ { "date": "...", "qty": 12345 } ] } ] } }
+ */
 export function parseJSON(jsonText: string): DailyMetrics[] {
   const data = JSON.parse(jsonText);
   const metrics: Map<string, DailyMetrics> = new Map();
 
-  // Health Auto Export JSON format: { "data": { "metrics": [...] } }
-  // or array of metric objects
-  let metricArrays: Record<string, unknown>[][] = [];
+  // Extract metric groups from various wrapper formats
+  let metricGroups: { name?: string; data?: unknown[] }[] = [];
 
-  if (data?.data?.metrics) {
-    metricArrays = data.data.metrics;
+  if (data?.data?.metrics && Array.isArray(data.data.metrics)) {
+    // HAE standard: { "data": { "metrics": [...] } }
+    metricGroups = data.data.metrics;
+  } else if (data?.metrics && Array.isArray(data.metrics)) {
+    // { "metrics": [...] }
+    metricGroups = data.metrics;
   } else if (Array.isArray(data)) {
-    metricArrays = [data];
-  } else if (data?.metrics) {
-    metricArrays = Array.isArray(data.metrics[0]) ? data.metrics : [data.metrics];
-  }
-
-  // Handle Health Auto Export format: each metric type has its own array
-  for (const metricGroup of metricArrays) {
-    if (!Array.isArray(metricGroup)) {
-      // Might be { name: "...", data: [...] } format
-      const group = metricGroup as unknown as Record<string, unknown>;
-      if (group.name && Array.isArray(group.data)) {
-        const metricName = String(group.name);
-        for (const entry of group.data as unknown as Record<string, unknown>[]) {
-          const dateStr = String(entry.date || entry.Date || '');
-          if (!dateStr) continue;
-          const date = normalizeDate(dateStr);
-          const existing = metrics.get(date) || { date };
-
-          const fieldKey = FIELD_MAP[metricName];
-          if (fieldKey && fieldKey !== 'date') {
-            const val = parseNumber(entry.qty || entry.value || entry.avg);
-            if (val !== undefined) {
-              (existing as unknown as Record<string, unknown>)[fieldKey] = val;
-            }
-          }
-          metrics.set(date, existing as DailyMetrics);
-        }
-      }
-      continue;
-    }
-
-    // Array of daily records
-    for (const row of metricGroup) {
-      const record = row as unknown as Record<string, unknown>;
+    // Array of daily records — handle as flat records
+    for (const row of data) {
+      if (!row || typeof row !== 'object') continue;
+      const record = row as Record<string, unknown>;
       const dateStr = String(record.date || record.Date || record.dateString || '');
       if (!dateStr) continue;
-
       const date = normalizeDate(dateStr);
       const existing = metrics.get(date) || { date };
 
@@ -174,6 +205,52 @@ export function parseJSON(jsonText: string): DailyMetrics[] {
           const num = parseNumber(value);
           if (num !== undefined) {
             (existing as unknown as Record<string, unknown>)[fieldKey] = num;
+          }
+        }
+      }
+      metrics.set(date, existing as DailyMetrics);
+    }
+    return Array.from(metrics.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  // Process HAE metric groups: { name: "step_count", units: "count", data: [...] }
+  for (const group of metricGroups) {
+    if (!group || typeof group !== 'object') continue;
+
+    const metricName = String(group.name || '').toLowerCase().trim();
+    const dataPoints = group.data;
+
+    if (!metricName || !Array.isArray(dataPoints)) continue;
+
+    // Find mappings for this metric name
+    const mappings = METRIC_NAME_MAP[metricName];
+
+    for (const point of dataPoints) {
+      if (!point || typeof point !== 'object') continue;
+      const entry = point as Record<string, unknown>;
+
+      // Get the date
+      const dateStr = String(entry.date || entry.Date || '');
+      if (!dateStr) continue;
+      const date = normalizeDate(dateStr);
+      const existing = metrics.get(date) || { date };
+
+      if (mappings && mappings.length > 0) {
+        // Use known mappings
+        for (const mapping of mappings) {
+          const rawVal = parseNumber(entry[mapping.valueKey] ?? entry.qty ?? entry.value ?? entry.avg);
+          if (rawVal !== undefined) {
+            const val = mapping.convert ? mapping.convert(rawVal) : rawVal;
+            (existing as unknown as Record<string, unknown>)[mapping.field] = val;
+          }
+        }
+      } else {
+        // Unknown metric — try generic field mapping from FIELD_MAP
+        const fieldKey = FIELD_MAP[metricName];
+        if (fieldKey && fieldKey !== 'date') {
+          const val = parseNumber(entry.qty ?? entry.value ?? entry.avg);
+          if (val !== undefined) {
+            (existing as unknown as Record<string, unknown>)[fieldKey] = val;
           }
         }
       }
